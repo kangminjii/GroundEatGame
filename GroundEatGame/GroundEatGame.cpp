@@ -3,8 +3,25 @@
 
 #include "framework.h"
 #include "GroundEatGame.h"
+#include <iostream>
 
 #define MAX_LOADSTRING 100
+using namespace std;
+
+
+#ifdef UNICODE
+#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console") 
+#else
+#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console") 
+#endif
+
+
+
+
+
+
+
+
 
 // 전역 변수:
 HINSTANCE hInst;                                // 현재 인스턴스입니다.
@@ -126,45 +143,156 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     PAINTSTRUCT ps;
     HDC hdc;
 
+    // 키보드 입력
+    enum{Left, Right, Up, Down, Painting, None};
+    static int state = None;
+    static int paintState = None;
+    
+    //// 주인공
+    // 위치
+    static POINT center = { 100, 100 };
+    int radius = 10;
+    // 지나간 길
+    static POINT location[100] = {};
+    static int count = 0;
+
 
     switch (message)
     {
     case WM_CREATE: // 초기화 값 세팅
-        break;
+    {
+        SetTimer(hWnd, 1, 100, NULL);
+        location[0] = center;
+    }
+    break;
+
+    case WM_TIMER:
+    {
+        //InvalidateRect(hWnd, NULL, TRUE);
+    }
+    break;
+
     case WM_KEYDOWN: // 눌리면 발생
-        break;
-    case WM_KEYUP: // 눌렀다 뗄때 발생
-        break;
-    case WM_COMMAND:
+    {
+        if (GetAsyncKeyState(VK_SPACE) & 0x8000)
         {
-            int wmId = LOWORD(wParam);
-            // 메뉴 선택을 구문 분석합니다:
-            switch (wmId)
+            paintState = Painting;
+        }
+
+        // 그리기 상태
+        if (paintState == Painting)
+        {
+            if (GetAsyncKeyState(VK_LEFT) & 0x8000)
             {
-            case IDM_ABOUT:
-                DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-                break;
-            case IDM_EXIT:
-                DestroyWindow(hWnd);
-                break;
-            default:
-                return DefWindowProc(hWnd, message, wParam, lParam);
+                if (state != Right)
+                {
+                    center.x -= 20;
+                    state = Left;
+                }
+            }
+            else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
+            {
+                if (state != Left)
+                {
+                    center.x += 20;
+                    state = Right;
+                }
+            }
+            else if (GetAsyncKeyState(VK_UP) & 0x8000)
+            {
+                if (state != Down)
+                {
+                    center.y -= 20;
+                    state = Up;
+                }
+            }
+            else if (GetAsyncKeyState(VK_DOWN) & 0x8000)
+            {
+                if (state != Up)
+                {
+                    center.y += 20;
+                    state = Down;
+                }
             }
         }
-        break;
-    case WM_PAINT:
+        // 테두리에서 이동할수 있는 상태
+        else
         {
-            hdc = BeginPaint(hWnd, &ps);
-          
-
-
-
-            EndPaint(hWnd, &ps);
+            paintState = None;
+            
+            if (GetAsyncKeyState(VK_LEFT) & 0x8000)
+            {
+                center.x -= 20;
+                state = Left;
+            }
+            else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
+            {
+                center.x += 20;
+                state = Right;
+            }
+            else if (GetAsyncKeyState(VK_UP) & 0x8000)
+            {
+                center.y -= 20;
+                state = Up;
+            }
+            else if (GetAsyncKeyState(VK_DOWN) & 0x8000)
+            {
+                center.y += 20;
+                state = Down;
+            }
         }
-        break;
+
+        location[++count] = { center.x, center.y };
+           
+        
+        InvalidateRect(hWnd, NULL, TRUE);
+    }
+
+    break;
+
+    case WM_KEYUP: // 눌렀다 뗄때 발생
+    {
+
+    }
+    break;
+
+    case WM_COMMAND:
+    {
+        int wmId = LOWORD(wParam);
+        // 메뉴 선택을 구문 분석합니다:
+        switch (wmId)
+        {
+        case IDM_ABOUT:
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+            break;
+        case IDM_EXIT:
+            DestroyWindow(hWnd);
+            break;
+        default:
+            return DefWindowProc(hWnd, message, wParam, lParam);
+        }
+    }
+    break;
+
+    case WM_PAINT:
+    {
+        hdc = BeginPaint(hWnd, &ps);
+     
+        for (int i = 0; i <= count; i++)
+        {
+            Ellipse(hdc, location[i].x - radius, location[i].y - radius, location[i].x + radius, location[i].y + radius);
+        }
+
+
+        EndPaint(hWnd, &ps);
+    }
+    break;
+
     case WM_DESTROY:
+        KillTimer(hWnd, 1);
         PostQuitMessage(0);
-        break;
+    break;
+
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
