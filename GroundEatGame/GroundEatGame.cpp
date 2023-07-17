@@ -9,18 +9,14 @@
 using namespace std;
 
 
-#ifdef UNICODE
-#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console") 
-#else
-#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console") 
-#endif
+//#ifdef UNICODE
+//#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console") 
+//#else
+//#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console") 
+//#endif
 
 
-
-
-
-
-
+bool isCollided(POINT circle, POINT dot);
 
 
 // 전역 변수:
@@ -144,18 +140,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     HDC hdc;
 
     // 키보드 입력
-    enum{Left, Right, Up, Down, Painting, None};
+    enum{Left, Right, Up, Down, Painting, Moving, None};
     static int state = None;
     static int paintState = None;
+    static int previousState = None;
     
     //// 주인공
     // 위치
     static POINT center = { 100, 100 };
     int radius = 10;
     // 지나간 길
-    static POINT location[100] = {};
-    static int count = 0;
-
+    static POINT location[1000] = {};
+    static int countL = 0;
+    // 색칠할 지점
+    static POINT painted[100] = {};
+    static int countP = 0;
 
     switch (message)
     {
@@ -174,86 +173,122 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_KEYDOWN: // 눌리면 발생
     {
+        // 상태 구분
         if (GetAsyncKeyState(VK_SPACE) & 0x8000)
         {
             paintState = Painting;
         }
+        else if (wParam == VK_LEFT || wParam == VK_RIGHT || wParam == VK_UP || wParam == VK_DOWN)
+        {
+            paintState = Moving;
+        }
+        else
+            paintState = None;
 
         // 그리기 상태
         if (paintState == Painting)
         {
             if (GetAsyncKeyState(VK_LEFT) & 0x8000)
             {
-                if (state != Right)
+                if (previousState != Left)
                 {
-                    center.x -= 20;
-                    state = Left;
+                    painted[countP++] = { center.x, center.y };
                 }
+                else
+                {
+                    if (state != Right)
+                    {
+                        center.x -= 5;
+                        state = Left;
+                    }
+                }
+               
+                previousState = Left;
             }
             else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
             {
-                if (state != Left)
+                if (previousState != Right)
                 {
-                    center.x += 20;
-                    state = Right;
+                    painted[countP++] = { center.x, center.y };
                 }
+                else
+                {
+                    if (state != Left)
+                    {
+                        center.x += 5;
+                        state = Right;
+                    }
+                }
+
+                previousState = Right;
             }
             else if (GetAsyncKeyState(VK_UP) & 0x8000)
             {
-                if (state != Down)
+                if (previousState != Up)
                 {
-                    center.y -= 20;
-                    state = Up;
+                    painted[countP++] = { center.x, center.y };
                 }
+                else
+                {
+                    if (state != Down)
+                    {
+                        center.y -= 5;
+                        state = Up;
+                    }
+                }
+
+                previousState = Up;
             }
             else if (GetAsyncKeyState(VK_DOWN) & 0x8000)
             {
-                if (state != Up)
+                if (previousState != Down)
                 {
-                    center.y += 20;
-                    state = Down;
+                    painted[countP++] = { center.x, center.y };
                 }
+                else
+                {
+                    if (state != Up)
+                    {
+                        center.y += 5;
+                        state = Down;
+                    }
+                }
+
+                previousState = Down;
             }
+            else
+                countL--;
+
+            location[++countL] = { center.x, center.y };
         }
         // 테두리에서 이동할수 있는 상태
-        else
+        else if(paintState == Moving)
         {
-            paintState = None;
-            
             if (GetAsyncKeyState(VK_LEFT) & 0x8000)
             {
-                center.x -= 20;
+                center.x -= 5;
                 state = Left;
             }
             else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
             {
-                center.x += 20;
+                center.x += 5;
                 state = Right;
             }
             else if (GetAsyncKeyState(VK_UP) & 0x8000)
             {
-                center.y -= 20;
+                center.y -= 5;
                 state = Up;
             }
             else if (GetAsyncKeyState(VK_DOWN) & 0x8000)
             {
-                center.y += 20;
+                center.y += 5;
                 state = Down;
             }
         }
-
-        location[++count] = { center.x, center.y };
-           
         
         InvalidateRect(hWnd, NULL, TRUE);
     }
 
-    break;
-
-    case WM_KEYUP: // 눌렀다 뗄때 발생
-    {
-
-    }
     break;
 
     case WM_COMMAND:
@@ -277,13 +312,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_PAINT:
     {
         hdc = BeginPaint(hWnd, &ps);
-     
-        for (int i = 0; i <= count; i++)
+        HBRUSH hBrush, oldBrush;
+
+        static int temp = 0;
+        // 선 & 머리
+        MoveToEx(hdc, location[0].x, location[0].y, NULL);
+
+        if (paintState == Painting)
         {
-            Ellipse(hdc, location[i].x - radius, location[i].y - radius, location[i].x + radius, location[i].y + radius);
+            for (int i = 0; i <= countL; i++)
+            {
+                if (isCollided(location[countL], location[i]))
+                {
+                    hBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
+                    oldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+                    Rectangle(hdc, location[i].x, location[i].y, painted[1].x, painted[1].y);
+
+                }
+                else
+                    LineTo(hdc, location[i].x, location[i].y);
+            }
+            Ellipse(hdc, location[countL].x - radius, location[countL].y - radius, location[countL].x + radius, location[countL].y + radius);
+
+        }
+        else if (paintState == Moving)
+        {
+            for (int i = 1; i <= countL; i++)
+                LineTo(hdc, location[i].x, location[i].y);
+            Ellipse(hdc, center.x - radius, center.y - radius, center.x + radius, center.y + radius);
         }
 
-
+        SelectObject(hdc, oldBrush);
+        DeleteObject(hBrush);
         EndPaint(hWnd, &ps);
     }
     break;
@@ -317,4 +377,14 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     }
     return (INT_PTR)FALSE;
+}
+
+
+bool isCollided(POINT circle, POINT dot)
+{
+    double distance = sqrt((circle.x - dot.x) * (circle.x - dot.x) + (circle.y - dot.y) * (circle.y - dot.y));
+    if (distance < 10)   return TRUE;
+    else return FALSE;
+
+
 }
