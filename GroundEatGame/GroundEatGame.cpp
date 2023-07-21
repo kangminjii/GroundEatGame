@@ -258,10 +258,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             else
                 painted.push_back(center);
           
+            // startRange 저장이 안되는중
             list<POINT>::iterator it3;
             for (it3 = painted.begin(); it3 != painted.end(); it3++)
             {
-                cout << "it3 : " << it3 << endl;
+                //cout << "it3 : " << it3 << endl;
                 cout << "painted: " << (*it3).x << ", " << (*it3).y << endl;
 
             }
