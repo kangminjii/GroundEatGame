@@ -5,7 +5,7 @@
 #include "GroundEatGame.h"
 #include <iostream>
 #include <cmath>
-#include <list>
+#include <vector>
 
 #define MAX_LOADSTRING 100
 using namespace std;
@@ -16,9 +16,6 @@ using namespace std;
 #else
 #pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console") 
 #endif
-
-
-//bool isCollided(POINT circle, POINT dot);
 
 
 // 전역 변수:
@@ -156,29 +153,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     static POINT center = { 100, 100 };
     int radius = 10;
     // 지나간 길
-    static list<POINT> location;
-    // 색칠할 지점
-    static list<POINT> painted;
-    // painted 좌표 2개로 범위 지정
-    static list<POINT> startRange;
-    static list<POINT> endRange;
+    static vector<POINT> location;
+    
+    //// 색칠
+    // 색칠할 지점, 계속 초기화하고 갱신할 변수
+    static vector<POINT> painted;
+    static bool isFull = FALSE;
+    // startRange = 꺾인 점, endRange = 그려진 선분과 만나는 점
+    static vector<POINT> startRange;
+    static vector<POINT> endRange;
+    static int count = 0; // endRange index 증가용
+    static int paintSize = 0;
+    static int tempSize = 0;
 
-    // 색칠된 도형의 좌표 저장
+    // 색칠된 도형 저장
+    static vector<POINT*> shapes;
 
     switch (message)
     {
+
     case WM_CREATE: // 초기화 값 세팅
     {
         SetTimer(hWnd, 1, 500, NULL);
 
         location.push_back(center);
-        painted.push_back(center);
+        //painted.push_back(center);
     }
     break;
 
     case WM_TIMER:
     {
-        //InvalidateRect(hWnd, NULL, TRUE);
+        InvalidateRect(hWnd, NULL, TRUE);
     }
     break;
 
@@ -197,12 +202,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             paintState = None;
 
         // 그리기 상태
-        if (paintState == Painting)
+        if (paintState == Painting && isFull == FALSE)
         {
             if (GetAsyncKeyState(VK_LEFT) & 0x8000)
             {
                 if (previousState != Left)
+                {
                     painted.push_back(center);
+                    startRange.push_back(center);
+                }
                 else
                 {
                     if (state != Right)
@@ -216,7 +224,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             else if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
             {
                 if (previousState != Right)
+                {
                     painted.push_back(center);
+                    startRange.push_back(center);
+                }
                 else
                 {
                     if (state != Left)
@@ -230,7 +241,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             else if (GetAsyncKeyState(VK_UP) & 0x8000)
             {
                 if (previousState != Up)
+                {
                     painted.push_back(center);
+                    startRange.push_back(center);
+                }
                 else
                 {
                     if (state != Down)
@@ -244,7 +258,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             else if (GetAsyncKeyState(VK_DOWN) & 0x8000)
             {
                 if (previousState != Down)
+                {
                     painted.push_back(center);
+                    startRange.push_back(center);
+                }
                 else
                 {
                     if (state != Up)
@@ -256,25 +273,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 previousState = Down;
             }
             else
-                painted.push_back(center);
-          
-            // startRange 저장이 안되는중
-            list<POINT>::iterator it3;
-            for (it3 = painted.begin(); it3 != painted.end(); it3++)
-            {
-                //cout << "it3 : " << it3 << endl;
-                cout << "painted: " << (*it3).x << ", " << (*it3).y << endl;
-
-            }
-            if (startRange.size() == 0)
-                startRange.push_back(painted.back());
-            else if(startRange.size() > 1)
-            {
-                cout << "error" << endl;
-
-                startRange.push_back(painted.back());
-                endRange.push_back(painted.back());
-            }
+                break;
 
             location.push_back(center);
         }
@@ -302,12 +301,50 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 state = Down;
             }
         }
-        
+       
+        // endRange 설정
+        if (startRange.size() > 1)
+        {
+            for (int i = 1; i < startRange.size(); i++)
+            {
+                if (startRange[i-1].x == startRange[i].x && center.x == startRange[i].x) // 일직선에 있을 때
+                {
+                    if (startRange[i - 1].y < center.y && center.y < startRange[i].y)
+                    {
+                        endRange.push_back(center);
+                        paintSize = startRange.size();
+                    }
+                }
+                if (startRange[i - 1].y == startRange[i].y && center.y == startRange[i].y) // 일직선에 있을 때
+                {
+                    if (startRange[i - 1].x < center.x && center.x < startRange[i].x)
+                    {
+                        endRange.push_back(center);
+                        paintSize = startRange.size();
+                    }
+                }
+            }
+        }
+
+        /////////////@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        // 내부로 안들어가게끔 설정
+        if (startRange.size() > 1)
+        {
+            for (int i = 1; i < startRange.size(); i++)
+            {
+                double distanceLine = sqrt((startRange[i - 1].x - startRange[i].x) * (startRange[i - 1].x - startRange[i].x)
+                                         + (startRange[i - 1].y - startRange[i].y) * (startRange[i - 1].y - startRange[i].y));
+
+            }
+        }
+
+
+
+
+
         InvalidateRect(hWnd, NULL, TRUE);
     }
-
     break;
-
     case WM_COMMAND:
     {
         int wmId = LOWORD(wParam);
@@ -334,76 +371,67 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         MoveToEx(hdc, location.front().x, location.front().y, NULL);
 
         // 그리기 상태
-        list<POINT>::iterator it = location.begin();
-
+        int size = painted.size() + 1;
+        POINT* temp = new POINT[size];
+        
         if (paintState == Painting)
         {
             // 조작에 따른 선 그리기
-
-            list<POINT>::iterator it = location.begin();
-
-            for (it = location.begin(); it != location.end(); it++)
-                LineTo(hdc, (*it).x, (*it).y);
-
+            for (int i = 0; i < location.size(); i++)
+                LineTo(hdc, location[i].x, location[i].y);
+            
             // 영역 표시하기
-
-            list<POINT>::iterator it1;
-            list<POINT>::iterator it2;
-
-            if (startRange.size() > 1)
+            if (endRange.size() == count + 1) // endRange.size()가 1이여야 첫 색칠이 시작됨
             {
-                for (it1 = startRange.begin(), it2 = endRange.begin(); it1 != startRange.end() && it2 != endRange.end(); it1++, it2++)
+                cout << "영역 표시하기 count :" << count << endl;
+                temp[0] = endRange[count];
+                // 영역 색칠하기
+                for (int m = 1; m < painted.size(); m++)
                 {
-                    // 지나간 부분의 선과 만났을 때
-                    if (((*it1).x <= center.x && center.x <= (*it2).x) && ((*it1).y <= center.y && center.y <= (*it2).y))
-                    {
-                        POINT temp[200];
-
-                        for (int j = 0; j < painted.size(); j++)
-                        {
-                            temp[j] = painted.front();
-                            painted.pop_front();
-                        }
-
-                        Polygon(hdc, temp, painted.size());
-                    }
+                    temp[m] = painted[m];
                 }
-            }
-           
-            // 영역 색칠하기
-            POINT temp[20];
-            for (int j = 0; j < painted.size(); j++)
-            {
-                temp[j] = painted.front();
-                painted.pop_front();
-            }
-            hBrush = CreateSolidBrush(RGB(0, 0, 255));
-            oldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+                if(size != 1)
+                    temp[size - 1] = endRange[count++];
 
-            Polygon(hdc, temp, painted.size());
-
-            SelectObject(hdc, oldBrush);
-            DeleteObject(hBrush);
-           
-            // 플레이어
-            Ellipse(hdc, location.back().x - radius, location.back().y - radius, location.back().x + radius, location.back().y + radius);
+               /* cout << "Start" << endl;
+                for (int i = 0; i < painted.size(); i++)
+                {
+                    cout << "temp : " << temp[i].x << ", " << temp[i].y << endl;
+                    cout << "painted : " << painted[i].x << ", " << painted[i].y << endl;
+                }*/
+                shapes.push_back(temp);
+            }
         }
         // 테두리에서 이동할수 있는 상태
         else if (paintState == Moving)
         {
-            list<POINT>::iterator it = location.begin();
-
-            for (it = location.begin(); it != location.end(); it++)
-                LineTo(hdc, (*it).x, (*it).y);
-            
-            Ellipse(hdc, center.x - radius, center.y - radius, center.x + radius, center.y + radius);
+            for (int i = 0; i < location.size(); i++)
+                LineTo(hdc, location[i].x, location[i].y);
         }
-       
+
+
+        hBrush = CreateSolidBrush(RGB(0, 0, 255));
+        oldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+
+        if (paintSize > 0)
+        {
+            for (int i = 0; i < shapes.size(); i++)
+                Polygon(hdc, shapes[i], paintSize);
+        }
+
+        SelectObject(hdc, oldBrush);
+        DeleteObject(hBrush);
+        
+        // 플레이어
+        Ellipse(hdc, center.x - radius, center.y - radius, center.x + radius, center.y + radius);
+        
         EndPaint(hWnd, &ps);
     }
     break;
 
     case WM_DESTROY:
+        //painted.clear();
+        //vector<POINT>().swap(painted);
         KillTimer(hWnd, 1);
         PostQuitMessage(0);
     break;
@@ -433,12 +461,3 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
     }
     return (INT_PTR)FALSE;
 }
-
-
-//bool isCollided(POINT circle, POINT dot)
-//{
-//    double distance = sqrt((circle.x - dot.x) * (circle.x - dot.x) + (circle.y - dot.y) * (circle.y - dot.y));
-//    
-//    if (distance < 1)   return TRUE;
-//    else return FALSE;
-//}
